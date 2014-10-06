@@ -1,0 +1,37 @@
+{
+  "name": "jmate",
+  "version": "0.0.1",
+  "description": "A nodejs port of rmate",
+  "bin": {
+    "jmate": "./jmate.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jrnewell/jmate.git"
+  },
+  "scripts": {
+    "build":       "coffee --compile --output lib src",
+    "clean":       "rm -rf lib",
+    "prepublish":  "coffee --compile --output lib src",
+    "postpublish": "rm -rf lib"
+  },
+  "dependencies" : {
+    "commander": "~2.3.0",
+    "chalk": "~0.5.1",
+    "lodash": "~2.4.1",
+    "prompt": "~0.2.14",
+    "js-yaml": "~3.2.2"
+  },
+  "keywords": [
+    "jmate", "rmate", "rsub", "sublime text", "textmate", "ssh", "remote"
+  ],
+  "author": "James Newell <james.newell@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jrnewell/jmate/issues"
+  },
+  "engines": {
+    "node": ">=0.10",
+    "npm": ">=1.4"
+  }
+}
