@@ -1,4 +1,5 @@
 net       = require("net")
+async     = require("async")
 settings  = require("./settings")
 send      = require("./send")
 listen    = require("./listen")
@@ -10,17 +11,26 @@ listen    = require("./listen")
 tcp = net.connect options.port, options.host, () ->
   console.log "Connected to #{tcp.remoteAddress}:#{tcp.remotePort}" if options.verbose
 
-  # first send our files
-  send tcp, (err) ->
-    return console.error "#{err}" if err?
+  async.series [
+    (callback) -> send tcp, callback
+    (callback) -> tcp.write(".\n", callback)
+    (callback) -> listen tcp, callback
 
-    tcp.write(".\n")
+  ], (err, results) ->
+     return console.error "#{err}" if err?
+     console.log "Done" if options.verbose
 
-    # now listen for changes
-    listen tcp, (err) ->
-      return console.error "#{err}" if err?
+  # # first send our files
+  # send tcp, (err) ->
+  #   return console.error "#{err}" if err?
 
-      console.log "Done" if options.verbose
+  #   tcp.write(".\n")
+
+  #   # now listen for changes
+  #   listen tcp, (err) ->
+  #     return console.error "#{err}" if err?
+
+  #     console.log "Done" if options.verbose
 
 tcp.on "error", (err) ->
   console.error "#{err}"
