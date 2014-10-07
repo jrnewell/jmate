@@ -8,6 +8,7 @@ module.exports = (settings, tcp, callback) ->
   {options, files, fileIsWritable} = settings
   firstLine = true
   strBuffer = ""
+  cmdObj = {}
 
   chomp = (line) ->
     return line.replace /(\n|\r)+$/, ""
@@ -50,56 +51,87 @@ module.exports = (settings, tcp, callback) ->
     buff = buff[(idx + 1)..]
     return [line, buff]
 
-  handleCmd = (buff) ->
-    console.error "handleCmd: #{buff}"
-    [cmd, buff] = readLine buff
+  # this is difficult to parse because we don't know in advance if we have the full message
+  # or due to lack of unique delimiter, so we need to make this function reentrant
+  handleCmd = () ->
+    console.error "handleCmd: #{strBuffer}"
 
-    variables = {}
-    data = ""
+    console.error "foo1"
 
-    [line, buff] = readLine buff
-    while line?
-      break if line is "\n"
+    unless cmdObj.cmd?
+      [cmd, strBuffer] = readLine strBuffer
+      return false unless cmd?
+      cmdObj.cmd = cmd
+
+    console.error "foo2"
+
+    cmdObj.variables = {}
+
+    assignData = () ->
+      console.error "foo7.1"
+      {size} = cmdObj
+      return false unless strBuffer.length >= size
+      cmdObj.data = strBuffer[..(size - 1)]
+      strBuffer = strBuffer[size..]
+      console.error "foo7.2"
+      return true
+
+    console.error "foo3"
+
+    # in case we exited after we got data size, but not the whole data payload
+    if cmdObj.size? and not cmdObj.data?
+      return false unless assignData()
+
+    console.error "foo4"
+
+    # read in variables
+    [line, strBuffer] = readLine strBuffer
+    return false unless line?
+    console.error "foo5"
+    while line isnt "\n"
+      console.error "foo6"
       [name, value] = line.split(": ", 2)
       if name is "data"
-        size = parseInt(value)
-        data = buff[..(size - 1)]
+        cmdObj.size = parseInt(value)
+        return false unless assignData()
       else
-        variables[name] = value
-      [line, buff] = readLine buff
+        cmdObj.variables[name] = value
+      [line, strBuffer] = readLine strBuffer
+      return false unless line?
+
+    console.error "foo8"
 
     console.error "== debug =="
-    console.error cmd
-    console.dir variables
+    console.error cmdObj.cmd
+    console.dir cmdObj.variables
 
-    switch cmd
-      when "save" then handleSave(variables, data)
-      when "close" then handleClose(variables, data)
+    switch cmdObj.cmd
+      when "save" then handleSave(cmdObj.variables, cmdObj.data)
+      when "close" then handleClose(cmdObj.variables, cmdObj.data)
       else
         console.error "Received unknown command #{cmd}, exiting..."
         process.exit(1)
 
-  handleFirstLine = (line) ->
+    cmdObj = {}
+    return true
+
+  handleFirstLine = () ->
+    idx = strBuffer.indexOf "\n"
+    return false if idx < 0
+    line = strBuffer[..idx]
     console.error "Connection: #{chomp(line)}" if options.verbose
+    strBuffer = strBuffer[(idx + 1)..]
+    firstLine = false
+    return true
 
   tcp.on 'data', (data) ->
     console.error "data: #{data}"
     handleData = () ->
+      return unless strBuffer.length > 0
       if firstLine
-        idx = strBuffer.indexOf "\n"
-        return if idx < 0
-        line = strBuffer[..idx]
-        handleFirstLine line
-        strBuffer = strBuffer[(idx + 1)..]
-        firstLine = false
-        handleData()
+        handleData() if handleFirstLine()
       else
-        idx = strBuffer.indexOf "\n\n"
-        return if idx < 0
-        buff = strBuffer[..(idx + 1)]
-        handleCmd buff
-        strBuffer = strBuffer[(idx + 2)..]
-        handleData()
+        handleData() if handleCmd()
 
     strBuffer += data.toString("utf8")
     handleData()
