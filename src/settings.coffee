@@ -11,12 +11,19 @@ options = files = undefined
 
 loadDiskSettings = () ->
   homePath = process.env[(if os.platform() is "win32" then "USERPROFILE" else "HOME")]
-  file = path.join homePath, ".rmate.rc"
-  return unless fs.existsSync file
+
+  # look up jmate (or legacy rmate)
+  for file in [".jmate.rc", ".rmate.rc"]
+    fullPath = path.join homePath, file
+    if fs.existsSync fullPath
+      rcFile = fullPath
+      break
+
+  return unless rcFile?
 
   # rmate uses YAML instead of json
   try
-    params = yaml.safeLoad(fs.readFileSync(file, "utf8"))
+    params = yaml.safeLoad(fs.readFileSync(rcFile, "utf8"))
     options.host = params.host if params.host?
     options.port = params.port if params.port?
   catch ex
@@ -25,7 +32,7 @@ loadDiskSettings = () ->
 loadSettings = () ->
   retObj.options = options =
     host: "localhost"
-    port: 52699
+    port: 52698
     wait: false
     force: false
     verbose: false
@@ -35,8 +42,11 @@ loadSettings = () ->
 
   loadDiskSettings()
 
+  # look up jmate env vars (or legacy rmate)
   options.host = process.env.RMATE_HOME if process.env.RMATE_HOME?
   options.port = process.env.RMATE_PORT if process.env.RMATE_PORT?
+  options.host = process.env.JMATE_HOME if process.env.JMATE_HOME?
+  options.port = process.env.JMATE_PORT if process.env.JMATE_PORT?
 
 loadSettings()
 
