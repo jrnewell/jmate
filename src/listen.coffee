@@ -1,11 +1,10 @@
 fs        = require("fs")
 path      = require("path")
-_         = require("lodash")
-chalk     = require("chalk")
 async     = require("async")
+settings  = require("./settings")
 
-module.exports = (settings, tcp, callback) ->
-  {options, files, fileIsWritable} = settings
+module.exports = (tcp, callback) ->
+  {options, fileIsWritable} = settings
   firstLine = true
   strBuffer = ""
   cmdObj = {}
@@ -17,7 +16,7 @@ module.exports = (settings, tcp, callback) ->
     file = variables.token
     if fs.existsSync file or fileIsWritable file
       try
-        console.error "Saving #{file}" if options.verbose
+        console.error "Saving file #{file}" if options.verbose
         if fs.existsSync file
           backupFile = backupFileBase = "#{file}.bak"
           bakCount = 2
@@ -40,18 +39,21 @@ module.exports = (settings, tcp, callback) ->
 
   handleClose = (variables, data) ->
     file = variables.token
-    console.error "Closed #{file}" if options.verbose
+    console.error "Closed file #{file}" if options.verbose
 
   readLine = (buff, chomp = true) ->
     idx = buff.indexOf("\n")
     return [null, buff] if idx < 0
+    return ["", buff[1..]] if chomp and idx == 0
     line = buff[..(if chomp then (idx - 1) else idx)]
     buff = buff[(idx + 1)..]
+    #console.log "line: #{line}"
     return [line, buff]
 
   # this is difficult to parse because we don't know in advance if we have the full message
   # or due to lack of unique delimiter, so we need to make this function reentrant
   handleCmd = () ->
+    console.log "handleCmd: #{strBuffer}"
     unless cmdObj.cmd?
       [cmd, strBuffer] = readLine strBuffer
       return false unless cmd?
@@ -72,8 +74,10 @@ module.exports = (settings, tcp, callback) ->
 
     # read in variables
     [line, strBuffer] = readLine strBuffer
+    #console.log "foo1"
     return false unless line?
     while line isnt "\n"
+      #console.log "foo2"
       [name, value] = line.split(": ", 2)
       if name is "data"
         cmdObj.size = parseInt(value)
@@ -82,6 +86,8 @@ module.exports = (settings, tcp, callback) ->
         cmdObj.variables[name] = value
       [line, strBuffer] = readLine strBuffer
       return false unless line?
+
+    #console.dir cmdObj
 
     switch cmdObj.cmd
       when "save" then handleSave(cmdObj.variables, cmdObj.data)
@@ -97,7 +103,7 @@ module.exports = (settings, tcp, callback) ->
     idx = strBuffer.indexOf "\n"
     return false if idx < 0
     line = strBuffer[..idx]
-    console.error "Connection: #{chomp(line)}" if options.verbose
+    console.error "Editor: #{chomp(line)}" if options.verbose
     strBuffer = strBuffer[(idx + 1)..]
     firstLine = false
     return true
@@ -108,6 +114,10 @@ module.exports = (settings, tcp, callback) ->
       if firstLine
         handleData() if handleFirstLine()
       else
+#         strBuffer = """close
+# token: testfile.txt
+
+# """
         handleData() if handleCmd()
 
     strBuffer += data.toString("utf8")

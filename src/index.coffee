@@ -1,28 +1,18 @@
-net       = require("net")
-_         = require("lodash")
-chalk     = require("chalk")
-Settings  = require("./settings")
-send      = require("./send")
-listen    = require("./listen")
+settings = require("./settings")
 
 # load settings
-settings = Settings()
-{options, files} = settings
+{options} = settings
 
-console.dir options
+if options.wait
+  require("./run")
+else
+  spawn = require("child_process").spawn
+  child_args = ["./lib/run.js"].concat process.argv[2..]
+  child = spawn "node", child_args,
+    stdio: "inherit"
+    detached: true
+  child.unref()
 
-# create TCP socket connection
-tcp = net.connect options.port, options.host, () ->
-  console.log "connected to #{tcp.remoteAddress}:#{tcp.remotePort}" if options.verbose
-
-  # first send our files
-  send settings, tcp, (err) ->
-    return console.error err if err?
-
-    tcp.write(".\n")
-
-    # now listen for changes
-    listen settings, tcp, (err) ->
-      return console.error err if err?
-
-      console.log "done" if options.verbose
+  child.on "error", (err) ->
+    console.error "#{err}"
+    process.exit(1)

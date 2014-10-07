@@ -1,10 +1,9 @@
 fs        = require("fs")
 path      = require("path")
-_         = require("lodash")
-chalk     = require("chalk")
 async     = require("async")
+settings  = require("./settings")
 
-module.exports = (settings, tcp, callback) ->
+module.exports = (tcp, callback) ->
   {options, files} = settings
 
   writeVar = (name, val) ->
@@ -79,7 +78,7 @@ module.exports = (settings, tcp, callback) ->
         sendEmptyFile(callback)
 
     sendData (err) ->
-      return console.error err if err
+      return console.error "#{err}" if err
       tcp.write "\n", () ->
         callback()
 
