@@ -7,8 +7,10 @@ if options.wait
   require("./run")
 else
   spawn = require("child_process").spawn
-  child_args = ["./lib/run.js"].concat process.argv[2..]
-  child = spawn "node", child_args,
+  cmd = process.argv[0]
+  runFile = (if cmd is "coffee" then "./src/run.coffee" else "./lib/run.js")
+  child_args = [runFile].concat process.argv[2..]
+  child = spawn cmd, child_args,
     stdio: "inherit"
     detached: true
   child.unref()

@@ -41,25 +41,23 @@ module.exports = (tcp, callback) ->
     file = variables.token
     console.error "Closed file #{file}" if options.verbose
 
-  readLine = (buff, chomp = true) ->
+  readLine = (buff) ->
     idx = buff.indexOf("\n")
     return [null, buff] if idx < 0
-    return ["", buff[1..]] if chomp and idx == 0
-    line = buff[..(if chomp then (idx - 1) else idx)]
+    return ["", buff[1..]] if idx == 0
+    line = buff[..(idx - 1)]
     buff = buff[(idx + 1)..]
-    #console.log "line: #{line}"
     return [line, buff]
 
-  # this is difficult to parse because we don't know in advance if we have the full message
-  # or due to lack of unique delimiter, so we need to make this function reentrant
+  # this is difficult to parse because we don't know in advance if we have the full message yet
+  # due to a lack of a unique delimiter or message size. Therefore, this function is reentrant.
   handleCmd = () ->
-    console.log "handleCmd: #{strBuffer}"
     unless cmdObj.cmd?
       [cmd, strBuffer] = readLine strBuffer
       return false unless cmd?
       cmdObj.cmd = cmd
 
-    cmdObj.variables = {}
+    cmdObj.variables = {} unless cmdObj.variables?
 
     assignData = () ->
       {size} = cmdObj
@@ -74,10 +72,8 @@ module.exports = (tcp, callback) ->
 
     # read in variables
     [line, strBuffer] = readLine strBuffer
-    #console.log "foo1"
     return false unless line?
-    while line isnt "\n"
-      #console.log "foo2"
+    while line isnt ""
       [name, value] = line.split(": ", 2)
       if name is "data"
         cmdObj.size = parseInt(value)
@@ -86,8 +82,6 @@ module.exports = (tcp, callback) ->
         cmdObj.variables[name] = value
       [line, strBuffer] = readLine strBuffer
       return false unless line?
-
-    #console.dir cmdObj
 
     switch cmdObj.cmd
       when "save" then handleSave(cmdObj.variables, cmdObj.data)
@@ -114,10 +108,6 @@ module.exports = (tcp, callback) ->
       if firstLine
         handleData() if handleFirstLine()
       else
-#         strBuffer = """close
-# token: testfile.txt
-
-# """
         handleData() if handleCmd()
 
     strBuffer += data.toString("utf8")
