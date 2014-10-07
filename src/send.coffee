@@ -4,7 +4,7 @@ _         = require("lodash")
 chalk     = require("chalk")
 async     = require("async")
 
-module.exports = (settings, tcp) ->
+module.exports = (settings, tcp, callback) ->
   {options, files} = settings
 
   writeVar = (name, val) ->
@@ -86,8 +86,8 @@ module.exports = (settings, tcp) ->
   # send all files (asynchronously)
   pairs = ([file, idx] for file, idx in files)
   itr = (p, callback) -> sendOpen(p[0], p[1], callback)
-  async.each pairs, itr, (err) ->
-    return console.error err if err
+  async.each pairs, itr, callback
+
 
 
 

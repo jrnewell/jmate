@@ -9,12 +9,20 @@ listen    = require("./listen")
 settings = Settings()
 {options, files} = settings
 
+console.dir options
+
 # create TCP socket connection
 tcp = net.connect options.port, options.host, () ->
   console.log "connected to #{tcp.remoteAddress}:#{tcp.remotePort}" if options.verbose
 
   # first send our files
-  send(settings, tcp)
+  send settings, tcp, (err) ->
+    return console.error err if err?
 
-  # now listen for changes
-  listen(settings, tcp)
+    tcp.write(".\n")
+
+    # now listen for changes
+    listen settings, tcp, (err) ->
+      return console.error err if err?
+
+      console.log "done" if options.verbose
