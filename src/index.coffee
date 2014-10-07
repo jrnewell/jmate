@@ -1,89 +1,67 @@
 fs        = require("fs")
 path      = require("path")
-os        = require("os")
 net       = require("net")
 _         = require("lodash")
-commander = require("commander")
 chalk     = require("chalk")
-yaml      = require("js-yaml")
+async     = require("async")
+Settings  = require("./settings")
 
-# make available throughout file
-settings = files = tcp = undefined
+# load settings
+settings = Settings()
+{options, files} = settings
 
-loadDiskSettings = () ->
-  homePath = process.env[(if os.platform() is "win32" then "USERPROFILE" else "HOME")]
-  file = path.join homePath, ".rmate.rc"
-  return unless fs.existsSync file
+tcp = undefined
 
-  # rmate uses YAML instead of json
-  try
-    params = yaml.safeLoad(fs.readFileSync(file, "utf8"))
-    settings.host = params.host if params.host?
-    settings.port = params.port if params.port?
-  catch ex
-    console.error ex
+writeVar = (name, val) ->
+  tcp.write("#{name}: #{val}\n")
 
-loadSettings = () ->
-  settings =
-    host: "localhost"
-    port: 52698
-    wait: false
-    force: false
-    verbose: false
-    lines: []
-    names: []
-    types: []
+sendStdin = (callback) ->
+  loadStdin = (callback) ->
+    data = new Buffer()
 
-  loadDiskSettings()
+    process.stdin.on "data", (_data) ->
+      data = Buffer.concat(data, _data)
 
-  settings.host = process.env.RMATE_HOME if process.env.RMATE_HOME?
-  settings.port = process.env.RMATE_PORT if process.env.RMATE_PORT?
+    process.stdin.on "error", (err) ->
+      callback(err)
 
-loadSettings()
+    process.stdin.on "end", () ->
+      callback(null, data)
 
-commander
-  .version(require("../package.json").version)
-  .option("-h, --host <str>", "Connect to host. Use 'auto' to detect the host from SSH. Defaults to '#{settings.host}'.")
-  .option("-p, --port <num>", "Port number to use for connection. Defaults to #{settings.port}.", parseInt)
-  .option("-w, --wait", "Wait for file to be closed by editor.")
-  .option("-l, --line <num>", "Place caret on line <num> after loading file.", parseInt)
-  .option("-n, --name <str>", "The display name shown in editor.")
-  .option("-t, --type <str>", "Treat file as having type <str>.")
-  .option("-f, --force", "Open even if the file is not writable.")
-  .option("-v, --verbose", "Verbose logging messages.")
+  loadStdin (err, data) ->
+    return callback(err) if err
+    return callback() unless data?
 
-commander.parse(process.argv)
+    writeVar "data", data.length
+    tcp.write data, () ->
+      callback()
 
-settings.host = commander.host if commander.host?
-settings.port = commander.port if commander.port?
-settings.wait = commander.wait if commander.wait?
-settings.lines.push commander.line if commander.line?
-settings.names.push commander.name if commander.name?
-settings.types.push commander.type if commander.type?
-settings.force = commander.force if commander.force?
-settings.verbose = commander.wait if commander.verbose?
+sendFile = (file, callback) ->
+  stat = fs.statSync file
+  return callback new Error("Not a file") unless stat.isFile()
+  return callback new Error("Cannot determine file size") unless stat.size?
+  writeVar "data", stat.size
 
-# parse ssh connection
-if settings.host is "auto"
-  settings.host = (if process.env.SSH_CONNECTION? then process.env.SSH_CONNECTION.split(" ")[0] else "localhost")
+  readStream = fs.createReadStream(file)
 
-fileIsWritable = (file) ->
-  try
-    return true unless fs.existsSync file
-    fd = fs.openSync(file, "a")
-    fs.closeSync(fd)
-    return true
-  catch ex
-    return false
+  readStream.on "error", (err) ->
+    callback(err)
 
-sendOpenFile = (file, idx, callback) ->
+  readStream.on "end", () ->
+    callback()
+
+  readStream.pipe tcp, end: false
+
+sendEmptyFile = (callback) ->
+  writeVar "data", 0
+  tcp.write "0", () ->
+    callback()
+
+sendOpen = (file, idx, callback) ->
   tcp.write("open\n")
 
-  writeVar = (name, val) ->
-    tcp.write("#{name}: #{val}")
-
-  if settings.names.length > idx
-    writeVar "display-name", settings.name[idx]
+  if options.names.length > idx
+    writeVar "display-name", options.name[idx]
   else if file is "-"
     writeVar "display-name", "#{tcp.localAddress}:untitled (stdin)"
   else
@@ -93,38 +71,41 @@ sendOpenFile = (file, idx, callback) ->
   writeVar "data-on-save", "yes"
   writeVar "re-activate", "yes"
   writeVar "token", file
-  writeVar "selection", settings.lines[idx] if settings.lines.length > idx
+  writeVar "selection", options.lines[idx] if options.lines.length > idx
   writeVar "file-type", "txt" if path is "-"
-  writeVar "file-type", settings.types[idx] if settings.types.length > idx
+  writeVar "file-type", options.types[idx] if options.types.length > idx
+
+  sendData = (callback) ->
+    if file is "-"
+      sendStdin(callback)
+    else if fs.existsSync file
+      sendFile(file, callback)
+    else
+      sendEmptyFile(callback)
+
+  sendData (err) ->
+    return console.error err if err
+    tcp.write "\n", () ->
+      callback()
+
+tcp = net.connect options.port, options.host, () ->
+  console.log "connected to #{tcp.remoteAddress}:#{tcp.remotePort}" if options.verbose
+
+  # async
+  pairs = ([file, idx] for file, idx in files)
+  itr = (p, callback) -> sendOpen(p[0], p[1], callback)
+  async.each pairs, itr, (err) ->
+    return console.error err if err
 
 
+  # tcp.on 'data', (data) ->
 
+  # tcp.on 'end', () ->
+  #   tcp.end()
+  #   console.log "done" if options.verbose
 
-files = commander.args[:]
-files.push "-" if files.length == 0 and (not process.stdin.isTTY or settings.wait)
-for file, idx in files
-  if file is "-"
-    console.error "Reading from stdin, press ^D to stop" if process.stdin.isTTY
-  else if fs.existsSync file
-    stat = fs.statSync file
-    console.error "#{file} is a directory. aborting..." if stat.isDirectory()
-    unless fileIsWritable(file)
-      if settings.force
-        console.error "file #{file} is not writable.  Opening anyway." if settings.verbose
-      else
-        console.error "file #{file} is not writable.  Use -f/--force to open anyway"
-
-tcp = net.connect settings.port, settings.host, () ->
-  console.log "connected to #{tcp.remoteAddress}:#{tcp.remotePort}" if settings.verbose
-
-  tcp.on 'data', (data) ->
-
-  tcp.on 'end', () ->
-    tcp.end()
-    console.log "done" if settings.verbose
-
-  tcp.on 'error', (err) ->
-    console.error err
+  # tcp.on 'error', (err) ->
+  #   console.error err
 
 
 
