@@ -14,7 +14,6 @@ module.exports = (settings, tcp, callback) ->
     return line.replace /(\n|\r)+$/, ""
 
   handleSave = (variables, data) ->
-    console.error "handleSave"
     file = variables.token
     if fs.existsSync file or fileIsWritable file
       try
@@ -40,7 +39,6 @@ module.exports = (settings, tcp, callback) ->
 
 
   handleClose = (variables, data) ->
-    console.error "handleClose"
     file = variables.token
     console.error "Closed #{file}" if options.verbose
 
@@ -54,42 +52,28 @@ module.exports = (settings, tcp, callback) ->
   # this is difficult to parse because we don't know in advance if we have the full message
   # or due to lack of unique delimiter, so we need to make this function reentrant
   handleCmd = () ->
-    console.error "handleCmd: #{strBuffer}"
-
-    console.error "foo1"
-
     unless cmdObj.cmd?
       [cmd, strBuffer] = readLine strBuffer
       return false unless cmd?
       cmdObj.cmd = cmd
 
-    console.error "foo2"
-
     cmdObj.variables = {}
 
     assignData = () ->
-      console.error "foo7.1"
       {size} = cmdObj
       return false unless strBuffer.length >= size
       cmdObj.data = strBuffer[..(size - 1)]
       strBuffer = strBuffer[size..]
-      console.error "foo7.2"
       return true
-
-    console.error "foo3"
 
     # in case we exited after we got data size, but not the whole data payload
     if cmdObj.size? and not cmdObj.data?
       return false unless assignData()
 
-    console.error "foo4"
-
     # read in variables
     [line, strBuffer] = readLine strBuffer
     return false unless line?
-    console.error "foo5"
     while line isnt "\n"
-      console.error "foo6"
       [name, value] = line.split(": ", 2)
       if name is "data"
         cmdObj.size = parseInt(value)
@@ -98,12 +82,6 @@ module.exports = (settings, tcp, callback) ->
         cmdObj.variables[name] = value
       [line, strBuffer] = readLine strBuffer
       return false unless line?
-
-    console.error "foo8"
-
-    console.error "== debug =="
-    console.error cmdObj.cmd
-    console.dir cmdObj.variables
 
     switch cmdObj.cmd
       when "save" then handleSave(cmdObj.variables, cmdObj.data)
@@ -125,7 +103,6 @@ module.exports = (settings, tcp, callback) ->
     return true
 
   tcp.on 'data', (data) ->
-    console.error "data: #{data}"
     handleData = () ->
       return unless strBuffer.length > 0
       if firstLine
