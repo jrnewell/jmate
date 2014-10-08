@@ -86,8 +86,3 @@ module.exports = (tcp, callback) ->
   pairs = ([file, idx] for file, idx in files)
   itr = (p, callback) -> sendOpen(p[0], p[1], callback)
   async.each pairs, itr, callback
-
-
-
-
-

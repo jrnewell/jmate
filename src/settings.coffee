@@ -13,10 +13,22 @@ loadDiskSettings = () ->
   homePath = process.env[(if os.platform() is "win32" then "USERPROFILE" else "HOME")]
 
   # look up jmate (or legacy rmate)
-  for file in [".jmate.rc", ".rmate.rc"]
-    fullPath = path.join homePath, file
-    if fs.existsSync fullPath
-      rcFile = fullPath
+  if os.platform() is "win32"
+    fileList = [
+      path.join(homePath, ".jmate.rc")
+      path.join(homePath, ".rmate.rc")
+    ]
+  else
+    fileList = [
+      path.join("etc", "jmate.rc")
+      path.join("etc", "rmate.rc")
+      path.join(homePath, ".jmate.rc")
+      path.join(homePath, ".rmate.rc")
+    ]
+
+  for file in fileList
+    if fs.existsSync file
+      rcFile = file
       break
 
   return unless rcFile?
@@ -52,6 +64,7 @@ loadSettings()
 
 commander
   .version(require("../package.json").version)
+  .usage("[options] <file ...>")
   .option("-h, --host <str>", "Connect to host. Use 'auto' to detect the host from SSH. Defaults to '#{options.host}'.")
   .option("-p, --port <num>", "Port number to use for connection. Defaults to #{options.port}.", parseInt)
   .option("-w, --wait", "Wait for file to be closed by editor.")

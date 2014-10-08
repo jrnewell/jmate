@@ -15,7 +15,6 @@ tcp = net.connect options.port, options.host, () ->
     (callback) -> send tcp, callback
     (callback) -> tcp.write(".\n", callback)
     (callback) -> listen tcp, callback
-
   ], (err, results) ->
      return console.error "#{err}" if err?
      console.log "Done" if options.verbose
